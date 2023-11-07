@@ -2,14 +2,18 @@ import json
 import sys
 import re
 import ipdb
+import time
 from bs4 import BeautifulSoup
 
 from selenium import webdriver
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.common.by import By
+from selenium.webdriver import Remote, ChromeOptions
+from selenium.webdriver.chromium.remote_connection import ChromiumRemoteConnection
 
 import constants
+import os
 
 def load_home_stats(card):
     stats = card.find("div", {"class": "HomeStatsV2"}).find_all("div", {"class": "stats"})
@@ -59,10 +63,29 @@ def get_page_data(cards):
     return page_json
 
 def scrape():
-    with webdriver.Chrome() as driver:
+    AUTH = os.environ['AUTH']
+    HOST = os.environ['HOST']
+    SBR_WEBDRIVER = f'https://{AUTH}@{HOST}'
+    chrome_options = webdriver.ChromeOptions()
+    prefs = {
+         "profile.managed_default_content_settings.images":2,
+         "profile.default_content_setting_values.notifications":2,
+         "profile.managed_default_content_settings.stylesheets":2,
+         "profile.managed_default_content_settings.cookies":2,
+         "profile.managed_default_content_settings.plugins":1,
+         "profile.managed_default_content_settings.popups":2,
+         "profile.managed_default_content_settings.geolocation":2,
+         "profile.managed_default_content_settings.media_stream":2,
+    }
+    chrome_options.add_experimental_option("prefs", prefs)
+
+    sbr_connection = ChromiumRemoteConnection(SBR_WEBDRIVER, 'goog', 'chrome')
+    # with Remote(sbr_connection, options=chrome_options) as driver:
+    with webdriver.Chrome(options=chrome_options) as driver:
         driver.get("https://www.redfin.com/city/17151/CA/San-Francisco/filter/sort=lo-days")
         # paginate button
-        next_btn = driver.find_element_by_xpath("//*[@id=\"results-display\"]/div[5]/div/div[3]/button[2]")
+        next_btn = driver.find_element(By.XPATH, "//*[@id=\"results-display\"]/div[5]/div/div[3]/button[2]")
+        # next_btn = WebDriverWait(driver, 60 * 5).until(EC.presence_of_element_located((By.XPATH, '//*[@id="results-display"]/div[5]/div/div[3]/button[2]')))
         home_json = []
         for _ in range (constants.NUM_PAGES):
             soup = BeautifulSoup(driver.page_source, 'html.parser')
@@ -75,7 +98,7 @@ def scrape():
                 driver.execute_script("arguments[0].click();", next_btn)
             except:
                 break
-            
+
         with open("../page.json", "w") as f:
             f.write(json.dumps(home_json))
             
