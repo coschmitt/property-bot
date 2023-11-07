@@ -1,0 +1,4 @@
+.*
+page.json
+test.json
+!.gitignore

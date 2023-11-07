@@ -1,4 +1,5 @@
 import json
+import sys
 import re
 import ipdb
 from bs4 import BeautifulSoup
@@ -74,7 +75,7 @@ def scrape():
                 driver.execute_script("arguments[0].click();", next_btn)
             except:
                 break
-    
+            
         with open("../page.json", "w") as f:
             f.write(json.dumps(home_json))
             
