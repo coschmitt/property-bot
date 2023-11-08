@@ -4,6 +4,8 @@ import re
 import ipdb
 import time
 from bs4 import BeautifulSoup
+import os
+import requests
 
 from selenium import webdriver
 from selenium.webdriver.support import expected_conditions as EC
@@ -13,7 +15,7 @@ from selenium.webdriver import Remote, ChromeOptions
 from selenium.webdriver.chromium.remote_connection import ChromiumRemoteConnection
 
 import constants
-import os
+
 
 def load_home_stats(card):
     stats = card.find("div", {"class": "HomeStatsV2"}).find_all("div", {"class": "stats"})
@@ -62,11 +64,14 @@ def get_page_data(cards):
         page_json.append(home_json)
     return page_json
 
+"""
+    Selenium Scraper: perfect for local development since we can easily paginate and its fast. Will not work in AWS or Azure 
+    without a residential proxy.
+"""
 def scrape():
-    AUTH = os.environ['AUTH']
-    HOST = os.environ['HOST']
-    SBR_WEBDRIVER = f'https://{AUTH}@{HOST}'
     chrome_options = webdriver.ChromeOptions()
+    PROXY = "http://36b742020a7664a713823b81768ddb9fb5ee54d1:premium_proxy=true&proxy_country=us@proxy.zenrows.com:8001"
+    chrome_options.add_argument(f"--proxy-server={PROXY}")
     prefs = {
          "profile.managed_default_content_settings.images":2,
          "profile.default_content_setting_values.notifications":2,
@@ -79,13 +84,11 @@ def scrape():
     }
     chrome_options.add_experimental_option("prefs", prefs)
 
-    sbr_connection = ChromiumRemoteConnection(SBR_WEBDRIVER, 'goog', 'chrome')
     # with Remote(sbr_connection, options=chrome_options) as driver:
     with webdriver.Chrome(options=chrome_options) as driver:
         driver.get("https://www.redfin.com/city/17151/CA/San-Francisco/filter/sort=lo-days")
         # paginate button
         next_btn = driver.find_element(By.XPATH, "//*[@id=\"results-display\"]/div[5]/div/div[3]/button[2]")
-        # next_btn = WebDriverWait(driver, 60 * 5).until(EC.presence_of_element_located((By.XPATH, '//*[@id="results-display"]/div[5]/div/div[3]/button[2]')))
         home_json = []
         for _ in range (constants.NUM_PAGES):
             soup = BeautifulSoup(driver.page_source, 'html.parser')
@@ -101,6 +104,33 @@ def scrape():
 
         with open("../page.json", "w") as f:
             f.write(json.dumps(home_json))
+
+"""
+    Scraping Ant solution: Use this method when running scraper from cloud. Most likely IPs coming from AWS or Azure 
+    will be blocked. Scraping Ant provides Residential proxies to avoid this (for a cost...)
+"""
+def get_source_html():
+    url = "https://api.scrapingant.com/v2/general"
+    params = {
+        "url": "https://www.redfin.com/city/17151/CA/San-Francisco/filter/sort=lo-days",
+        "x-api-key": os.environ["SCRAPING_ANT_KEY"],
+        "proxy_type": "residential"
+
+    }
+
+    r = requests.get(url, params=params)
+    return r.text
+
+def scraping_ant():
+    page_source = get_source_html()
+    soup = BeautifulSoup(page_source, 'html.parser')
+    # get all the cards that have housing data
+    cards = soup.find("div", {"class": "HomeViews"}).find_all('div', {'id': re.compile(r'^MapHomeCard_\d*$')})
+    # iterate through cards and get stats
+    home_json = get_page_data(cards)
+
+    with open("../page.json", "w") as f:
+        f.write(json.dumps(home_json))
             
 if __name__ == '__main__':
     scrape()
