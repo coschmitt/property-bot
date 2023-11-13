@@ -2,7 +2,6 @@ import json
 import sys
 import re
 import ipdb
-import time
 from bs4 import BeautifulSoup
 import os
 import requests
@@ -20,7 +19,6 @@ import constants
 def load_home_stats(card):
     stats = card.find("div", {"class": "HomeStatsV2"}).find_all("div", {"class": "stats"})
     stat_json = {'stats': {}}
-
     for stat in stats:
         contents = " ".join(stat.findAll(string=True, recursive=False))
 
@@ -36,7 +34,7 @@ def load_home_stats(card):
             stat_json["stats"]["lot_sqft"] = float(num)
         elif "sq ft" in contents.lower():
             stat_json["stats"]["home_sqft"] = float(num)
-    
+        
     return stat_json
 
 def get_details_dict(card):
@@ -60,7 +58,12 @@ def get_page_data(cards):
         
         home_json["num_rooms"] = loc_details['numberOfRooms']
         home_json["type"] = loc_details['@type']
-        home_json["price"] = float(price_details['offers']['price'])
+        # if this fails, then we are going to skip the house
+        try:
+            home_json["price"] = float(price_details['offers']['price'])
+        except:
+            continue
+
         page_json.append(home_json)
     return page_json
 

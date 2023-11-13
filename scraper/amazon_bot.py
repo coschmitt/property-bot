@@ -34,9 +34,10 @@ def scrape():
     chrome_options.add_experimental_option("prefs", prefs)
 
     sbr_connection = ChromiumRemoteConnection(SBR_WEBDRIVER, 'goog', 'chrome')
-    # with Remote(sbr_connection, options=chrome_options) as driver:
+    #with Remote(sbr_connection, options=chrome_options) as driver:
     with webdriver.Chrome(options=chrome_options) as driver:
         driver.get("https://www.amazon.com/Best-Sellers-Sports-Outdoors/zgbs/sporting-goods/ref=zg_bs_nav_sporting-goods_0")
+        driver.find_element(By.CLASS_NAME, "a-last")
 
 
 if __name__ == '__main__':
