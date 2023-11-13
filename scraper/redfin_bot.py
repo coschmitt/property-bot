@@ -7,8 +7,6 @@ import os
 import requests
 
 from selenium import webdriver
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.common.by import By
 from selenium.webdriver import Remote, ChromeOptions
 from selenium.webdriver.chromium.remote_connection import ChromiumRemoteConnection
@@ -58,6 +56,7 @@ def get_page_data(cards):
         
         home_json["num_rooms"] = loc_details['numberOfRooms']
         home_json["type"] = loc_details['@type']
+
         # if this fails, then we are going to skip the house
         try:
             home_json["price"] = float(price_details['offers']['price'])
