@@ -1,10 +1,10 @@
 import json
-import sys
 import re
 import ipdb
 from bs4 import BeautifulSoup
 import os
 import requests
+import boto3
 
 from selenium import webdriver
 from selenium.webdriver.common.by import By
@@ -13,6 +13,15 @@ from selenium.webdriver.chromium.remote_connection import ChromiumRemoteConnecti
 
 import constants
 
+def batched(iterable: list, max_batch_size: int):
+    batch = []
+    for element in iterable:
+        batch.append(element)
+        if len(batch) >= max_batch_size:
+            yield batch
+            batch = []
+    if len(batch) > 0:
+        yield batch
 
 def load_home_stats(card):
     stats = card.find("div", {"class": "HomeStatsV2"}).find_all("div", {"class": "stats"})
@@ -39,22 +48,27 @@ def get_details_dict(card):
     scripts = card.find_all("script")
     return json.loads(scripts[0].contents[0])
 
+def get_key(address):
+    return "".join(address["street"].split()) + "$" + address["zipcode"]
+
 def get_page_data(cards):
     page_json = []
 
     for card in cards:
-        home_json = load_home_stats(card)
+        # home_json = load_home_stats(card)
+        home_json = {}
         loc_details, price_details = get_details_dict(card) # location stats
         home_json["name"] = loc_details['name']
         home_json["url"] = constants.BASE_URL + loc_details['url']
         home_json["address"] = {
             'street'  : loc_details['address']['streetAddress'],
-            'state'   : loc_details['address']['addressLocality'],
+            'city'    : loc_details['address']['addressLocality'],
             'zipcode' : loc_details['address']['postalCode'],
+            'state'   : loc_details['address']['addressRegion'],
             'country' : loc_details['address']['addressCountry']
         }
         
-        home_json["num_rooms"] = loc_details['numberOfRooms']
+        home_json["num_rooms"] = loc_details.get("numberOfRooms", None)
         home_json["type"] = loc_details['@type']
 
         # if this fails, then we are going to skip the house
@@ -65,6 +79,23 @@ def get_page_data(cards):
 
         page_json.append(home_json)
     return page_json
+
+def save_data(home_json):
+    name_set = set()
+    sqs = boto3.resource("sqs", region_name = "us-east-2")
+    queue = sqs.get_queue_by_name(QueueName="property-bot-queue")
+    
+    for batch in batched(home_json, 10):
+        entries = []
+        for body in batch:
+            key = get_key(body["address"])
+            if key not in name_set:
+                entries.append({
+                    'MessageBody': json.dumps(body),
+                    'Id': str(hash(body["name"]))
+                })
+                name_set.add(key)
+        response = queue.send_messages(Entries=entries)
 
 """
     Selenium Scraper: perfect for local development since we can easily paginate and its fast. Will not work in AWS or Azure 
@@ -104,8 +135,9 @@ def scrape():
             except:
                 break
 
-        with open("../page.json", "w") as f:
-            f.write(json.dumps(home_json))
+        save_data(home_json)
+        # with open("../page.json", "w") as f:
+        #     f.write(json.dumps(home_json))
 
 """
     Scraping Ant solution: Use this method when running scraper from cloud. Most likely IPs coming from AWS or Azure 
